@@ -1,0 +1,22 @@
+# =============================================
+# EggVision - Dependências do Projeto
+# =============================================
+# Instale com: pip install -r requirements.txt
+
+# Ultralytics YOLO - framework de visão computacional
+ultralytics>=8.0.0
+
+# OpenCV - leitura de imagem, vídeo e webcam
+opencv-python>=4.8.0
+
+# NumPy - operações com arrays/matrizes
+numpy
+
+# Pillow - manipulação de imagens
+Pillow
+
+# scikit-learn - utilidades de ML (métricas, splits)
+scikit-learn
+
+# tqdm - barras de progresso
+tqdm

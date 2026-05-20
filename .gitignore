@@ -1,0 +1,40 @@
+# =============================================
+# EggVision - .gitignore
+# =============================================
+
+# Ambiente virtual Python
+venv/
+.venv/
+env/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Dataset (imagens são pesadas demais para git)
+raw_dataset/
+dataset/
+
+# Resultados de treinamento (modelos são pesados)
+runs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Distribuição
+dist/
+build/
+*.egg-info/
