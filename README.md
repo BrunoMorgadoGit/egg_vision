@@ -1,241 +1,218 @@
-# 🥚 EggVision — Classificação de Ovos com YOLO
+# EggVision — Classificação de Ovos com YOLOv8
 
-Sistema MVP de visão computacional para classificar ovos como **normal** ou **defeituoso** usando Ultralytics YOLO Classification e OpenCV.
+Sistema de visão computacional para classificar a imagem inteira de um ovo como:
 
-## 📋 O que é o EggVision?
+| Classe | Situação atual |
+|--------|----------------|
+| `normal` | Treinável quando houver imagens em `train` e `val` |
+| `rachado` | Treinável quando houver imagens em `train` e `val` |
+| `sujo` | Preparada na estrutura, mas ignorada enquanto estiver vazia |
 
-O EggVision é um **MVP (Produto Mínimo Viável)** que utiliza inteligência artificial para identificar se um ovo está **normal** ou **defeituoso** a partir de imagens simples, sem esteira industrial.
+Importante: uma pasta vazia não representa uma classe treinada. O modelo só reconhecerá `sujo` depois que imagens reais dessa categoria forem adicionadas aos conjuntos de treino, validação e teste e o treinamento for executado novamente.
 
-### Classes de classificação:
+## Estrutura
 
-| Classe | Descrição |
-|--------|-----------|
-| **normal** | Ovos sem defeitos visíveis |
-| **defeituoso** | Ovos rachados **ou** sujos (agrupados em uma única classe) |
-
-> **📌 Importante:** Este MVP classifica a **imagem inteira** — ele não localiza onde está a rachadura ou sujeira. A evolução futura será usar **YOLO Detection com bounding boxes** para localizar exatamente o defeito.
-
-## 📁 Estrutura do Projeto
-
-```
+```text
 eggvision/
-├── raw_dataset/                 ← suas imagens originais
-│   ├── normal/                  ← fotos de ovos normais
-│   ├── rachado/                 ← fotos de ovos rachados
-│   └── sujo/                    ← fotos de ovos sujos
-├── dataset/                     ← gerado automaticamente pelo prepare_dataset.py
+├── raw_dataset/
+│   ├── normal/
+│   ├── rachado/
+│   └── sujo/
+├── dataset/
 │   ├── train/
 │   │   ├── normal/
-│   │   └── defeituoso/
+│   │   ├── rachado/
+│   │   └── sujo/
 │   ├── val/
 │   │   ├── normal/
-│   │   └── defeituoso/
+│   │   ├── rachado/
+│   │   └── sujo/
 │   └── test/
 │       ├── normal/
-│       └── defeituoso/
+│       ├── rachado/
+│       └── sujo/
 ├── src/
-│   ├── prepare_dataset.py       ← organiza raw_dataset → dataset
-│   ├── check_dataset.py         ← verifica e mostra estatísticas
-│   ├── train.py                 ← treina o modelo YOLO
-│   ├── predict_image.py         ← predição em imagem
-│   ├── predict_video.py         ← predição em vídeo
-│   ├── predict_webcam.py        ← predição em webcam (tempo real)
-│   └── utils.py                 ← funções utilitárias
-├── runs/                        ← resultados de treinamento
-├── requirements.txt
-├── .gitignore
-└── README.md
+│   ├── prepare_dataset.py
+│   ├── check_dataset.py
+│   ├── train.py
+│   ├── validate_model.py
+│   ├── predict_image.py
+│   ├── predict_video.py
+│   ├── predict_webcam.py
+│   └── utils.py
+└── runs/classify/eggvision_mvp/
 ```
 
-## 📷 Onde Colocar as Imagens
+## Instalação
 
-Coloque suas fotos originais nas pastas do `raw_dataset/`:
-
-| Pasta | Conteúdo |
-|-------|----------|
-| `raw_dataset/normal/` | Fotos de ovos normais (sem defeitos) |
-| `raw_dataset/rachado/` | Fotos de ovos rachados |
-| `raw_dataset/sujo/` | Fotos de ovos sujos |
-
-### Como Nomear as Imagens
-
-Use o padrão `categoria_ovoXX_fotoYY.extensão`:
-
-```
-raw_dataset/
-  normal/
-    normal_ovo01_foto01.jpg
-    normal_ovo01_foto02.jpg    ← mesma ovo, ângulo diferente
-    normal_ovo02_foto01.jpg
-  rachado/
-    rachado_ovo01_foto01.jpg
-    rachado_ovo01_foto02.jpg
-  sujo/
-    sujo_ovo01_foto01.jpg
-    sujo_ovo02_foto01.jpg
-```
-
-> **⚠️ Importante sobre nomes:** O script `prepare_dataset.py` usa o padrão `ovoXX` para agrupar fotos do mesmo ovo. Isso evita que fotos do mesmo ovo caiam em splits diferentes (vazamento de dados). Se os nomes não seguirem esse padrão, cada arquivo será tratado como um ovo independente.
-
-**Extensões aceitas:** `.jpg`, `.jpeg`, `.png`, `.webp`
-
-### Quantidade Recomendada
-
-| Classe | Mínimo MVP | Ideal |
-|--------|-----------|-------|
-| normal | ~100 fotos | 200+ |
-| rachado | ~50 fotos | 100+ |
-| sujo | ~50 fotos | 100+ |
-
-## 🚀 Instalação
-
-### 1. Acesse o projeto
+Linux/macOS:
 
 ```bash
 cd eggvision
-```
-
-### 2. Crie e ative um ambiente virtual
-
-```bash
 python3 -m venv venv
 source venv/bin/activate
-```
-
-### 3. Instale as dependências
-
-```bash
 pip install -r requirements.txt
 ```
 
-> **Nota:** O PyTorch será instalado automaticamente pelo `ultralytics`. Se tiver GPU NVIDIA com CUDA, consulte [pytorch.org](https://pytorch.org/) para instalar a versão com suporte a GPU.
+Windows PowerShell:
 
-## 📦 Passo a Passo Completo
+```powershell
+cd eggvision
+py -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
-### 1. Preparar o dataset
+## Organizar imagens
 
-Após colocar suas imagens em `raw_dataset/`, execute:
+Coloque as imagens originais em:
+
+```text
+raw_dataset/normal/
+raw_dataset/rachado/
+raw_dataset/sujo/
+```
+
+Extensões aceitas: `.jpg`, `.jpeg`, `.png`, `.webp`.
+
+Use nomes com o mesmo ID para fotos do mesmo ovo, por exemplo:
+
+```text
+normal_ovo01_foto01.jpg
+normal_ovo01_foto02.jpg
+rachado_ovo03_foto01.jpg
+```
+
+O `prepare_dataset.py` usa o padrão `ovoXX` para manter fotos do mesmo ovo no mesmo split e reduzir vazamento de dados.
+
+## Preparar dataset
 
 ```bash
 python src/prepare_dataset.py
 ```
 
-Isso vai:
-- Ler as imagens de `raw_dataset/normal/`, `rachado/` e `sujo/`
-- Agrupar `rachado` e `sujo` na classe `defeituoso`
-- Dividir em **train (70%)**, **val (15%)** e **test (15%)**
-- Manter fotos do mesmo ovo no mesmo split (evita vazamento)
-- Salvar em `dataset/train/`, `dataset/val/`, `dataset/test/`
+O script:
 
-**Opções:**
+- lê `raw_dataset/normal`, `raw_dataset/rachado` e `raw_dataset/sujo`;
+- preserva as classes separadas;
+- cria `dataset/train`, `dataset/val` e `dataset/test`;
+- cria as pastas `sujo` mesmo que ainda estejam vazias;
+- não cria imagens falsas.
+
+Opções:
+
 ```bash
-# Alterar proporções
 python src/prepare_dataset.py --train 0.8 --val 0.1 --test 0.1
-
-# Alterar seed
 python src/prepare_dataset.py --seed 123
 ```
 
-> **⚠️ Atenção:** O `prepare_dataset.py` limpa a pasta `dataset/` antes de gerar. Se você adicionou imagens manualmente nela, elas serão perdidas!
-
-### 2. Verificar o dataset
+## Verificar dataset
 
 ```bash
 python src/check_dataset.py
 ```
 
-Mostra estatísticas: total de imagens, quantidade por split e por classe, e alertas sobre desequilíbrios.
+A verificação informa:
 
-### 3. Treinar o modelo
+- pastas ausentes;
+- quantidade de imagens por classe;
+- classe vazia;
+- formatos inválidos ou imagens ilegíveis;
+- poucas imagens;
+- desequilíbrio entre classes;
+- possíveis duplicatas exatas ou imagens muito semelhantes entre treino, validação e teste.
+
+## Treinar
 
 ```bash
 python src/train.py
 ```
 
-O script irá:
-1. Verificar se o dataset está organizado
-2. Carregar o modelo pré-treinado `yolo11n-cls.pt`
-3. Treinar por 50 épocas com data augmentation
-4. Salvar o melhor modelo em `runs/classify/eggvision_mvp/weights/best.pt`
+O treino usa `yolov8n-cls.pt`, ou seja, um modelo YOLO de classificação, não detecção.
 
-### 4. Testar com imagem
+Enquanto `sujo` estiver vazia, o script:
+
+- exibe aviso claro;
+- ignora `sujo` temporariamente;
+- treina somente `normal` e `rachado`;
+- informa que o modelo ainda não reconhece ovos sujos.
+
+O melhor modelo fica em:
+
+```text
+runs/classify/eggvision_mvp/weights/best.pt
+```
+
+## Validar modelo
+
+```bash
+python src/validate_model.py --split val
+```
+
+Para avaliar no teste:
+
+```bash
+python src/validate_model.py --split test
+```
+
+O script salva métricas em:
+
+```text
+runs/classify/eggvision_mvp/validation_val/
+runs/classify/eggvision_mvp/validation_test/
+```
+
+Ele calcula precision, recall, F1-score e matriz de confusão, com destaque para o erro crítico `rachado` classificado como `normal`.
+
+## Testar uma imagem
 
 ```bash
 python src/predict_image.py caminho/da/imagem.jpg
 ```
 
-Exemplo:
-```bash
-python src/predict_image.py dataset/test/normal/normal_ovo01_foto01.jpg
-```
-
-### 5. Testar com vídeo
+Com limite de confiança:
 
 ```bash
-python src/predict_video.py caminho/do/video.mkv
+python src/predict_image.py caminho/da/imagem.jpg --conf 0.70
 ```
 
-Formatos aceitos: `.mp4`, `.avi`, `.mkv`. Pressione `q` para sair.
-
-### 6. Testar com webcam (tempo real)
+Sem abrir janela OpenCV, útil em servidores:
 
 ```bash
-python src/predict_webcam.py
+python src/predict_image.py caminho/da/imagem.jpg --no-show
 ```
 
-Abre a webcam padrão e classifica em tempo real. Pressione `q` para sair.
+A saída inclui:
 
-## ⚙️ Configurações de Treinamento
+- classe prevista;
+- porcentagem de confiança;
+- limite mínimo de confiança;
+- resultado `incerto` quando a confiança fica abaixo do limite;
+- aviso quando o modelo ainda não tem a classe `sujo`;
+- imagem anotada salva em `outputs/predictions/`.
 
-Ajustáveis no arquivo `src/train.py`:
+## Configurações de treino
 
-| Parâmetro | Valor Padrão | Descrição |
-|-----------|-------------|-----------|
-| `MODEL_NAME` | `yolo11n-cls.pt` | Modelo base (trocar para `yolov8n-cls.pt` se YOLO11 não disponível) |
-| `IMGSZ` | `224` | Tamanho da imagem de entrada |
-| `EPOCHS` | `50` | Número de épocas |
-| `BATCH` | `16` | Tamanho do batch (reduzir se faltar memória) |
-| `SEED` | `42` | Seed para reprodutibilidade |
+Valores principais em `src/train.py`:
 
-### Data Augmentation
+| Parâmetro | Valor |
+|-----------|-------|
+| `MODEL_NAME` | `yolov8n-cls.pt` |
+| `IMGSZ` | `320` |
+| `EPOCHS` | `80` |
+| `PATIENCE` | `15` |
+| `BATCH` | `8` |
+| `SEED` | `42` |
 
-O augmentation é aplicado **durante o treinamento** pelo YOLO (não cria imagens extras no disco):
+O treino usa data augmentation moderado: rotação, espelhamento horizontal, translação, escala, variação de saturação/brilho e random erasing. Isso ajuda, mas não substitui imagens reais variadas.
 
-| Augmentation | Valor | Descrição |
-|-------------|-------|-----------|
-| `degrees` | 25 | Rotação ±25 graus |
-| `fliplr` | 0.5 | Espelhamento horizontal |
-| `translate` | 0.1 | Translação 10% |
-| `scale` | 0.2 | Zoom ±20% |
-| `hsv_s` | 0.2 | Variação de saturação ±20% |
-| `hsv_v` | 0.2 | Variação de brilho ±20% |
-| `erasing` | 0.1 | Random erasing |
+## Para adicionar `sujo` corretamente
 
-> **💡 Dica:** Data augmentation ajuda muito, mas **não substitui fotos reais variadas**. Quanto mais diversidade de ângulos, iluminações e fundos, melhor o modelo.
+1. Adicione imagens reais em `raw_dataset/sujo/`.
+2. Garanta amostras suficientes para `train`, `val` e `test`.
+3. Execute `python src/prepare_dataset.py`.
+4. Execute `python src/check_dataset.py`.
+5. Execute `python src/train.py` novamente.
+6. Confirme em `python src/validate_model.py --split val` que `sujo` aparece nas métricas.
 
-## 🔮 Evolução Futura
-
-Este MVP é o **primeiro passo**. As próximas etapas planejadas são:
-
-1. **YOLO Detection** — usar detecção com bounding boxes para **localizar exatamente onde está o defeito**
-2. **Separar tipos de defeito** — classificar em rachado, sujo, manchado
-3. **Mais dados** — expandir para 500-1000+ imagens
-4. **Integração com esteira** — câmera fixa em esteira industrial
-5. **API REST** — para integração com outros sistemas
-6. **Dashboard** — interface para estatísticas de classificação
-
-## ❓ Solução de Problemas
-
-| Problema | Solução |
-|----------|---------|
-| Modelo treinado não encontrado | Execute `python src/train.py` primeiro |
-| raw_dataset/ não encontrado | Crie as pastas e adicione suas imagens |
-| Nenhuma imagem encontrada | Verifique extensões (.jpg, .jpeg, .png, .webp) |
-| Webcam não abre | Verifique se está conectada e liberada |
-| Erro de memória no treino | Reduza `BATCH` para 8 ou 4 em `train.py` |
-| YOLO11 não encontrado | Troque `MODEL_NAME` para `yolov8n-cls.pt` |
-| Parâmetro de augmentation incompatível | Comente a linha correspondente em `train.py` |
-
-## 📄 Licença
-
-Projeto educacional / MVP para validação de conceito.
+Enquanto esses passos não forem feitos, o modelo não deve ser usado para reconhecer ovos sujos.

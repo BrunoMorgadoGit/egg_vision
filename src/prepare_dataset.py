@@ -5,8 +5,8 @@ Organiza as imagens de raw_dataset/ em dataset/train, val e test.
 
 Mapeamento:
   raw_dataset/normal/  → dataset/{split}/normal/
-  raw_dataset/rachado/ → dataset/{split}/defeituoso/
-  raw_dataset/sujo/    → dataset/{split}/defeituoso/
+  raw_dataset/rachado/ → dataset/{split}/rachado/
+  raw_dataset/sujo/    → dataset/{split}/sujo/
 
 Uso:
   python src/prepare_dataset.py
@@ -23,14 +23,15 @@ from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from utils import (
-    get_project_root, validate_image_file, safe_mkdir,
-    clear_directory, VALID_IMAGE_EXTENSIONS,
+    get_project_root, safe_mkdir,
+    clear_directory, PROJECT_CLASSES, REQUIRED_SPLITS,
+    ensure_dataset_structure, scan_class_directory,
 )
 
 RAW_TO_CLASS = {
     "normal": "normal",
-    "rachado": "defeituoso",
-    "sujo": "defeituoso",
+    "rachado": "rachado",
+    "sujo": "sujo",
 }
 
 
@@ -54,14 +55,11 @@ def collect_images(raw_path: str) -> dict:
             print(f"   ⚠️  Pasta não encontrada: {folder_path}")
             continue
 
+        scan = scan_class_directory(folder_path)
+        skipped = len(scan["invalid"])
         count = 0
-        skipped = 0
-        for fn in sorted(os.listdir(folder_path)):
-            fp = os.path.join(folder_path, fn)
-            if not validate_image_file(fp):
-                if os.path.isfile(fp):
-                    skipped += 1
-                continue
+        for fp in scan["images"]:
+            fn = os.path.basename(fp)
             egg_id = extract_egg_id(fn)
             group_key = f"{raw_folder}_{egg_id}"
             images[target_class][group_key].append(fp)
@@ -149,18 +147,30 @@ def prepare_dataset(train_r=0.70, val_r=0.15, test_r=0.15, seed=42):
 
     print(f"\n🔍 Coletando imagens...")
     images = collect_images(raw_path)
-    if not images:
-        print(f"\n❌ Nenhuma imagem válida!")
-        sys.exit(1)
 
     print(f"\n🧹 Limpando dataset/...")
     clear_directory(dataset_path)
+    ensure_dataset_structure(dataset_path)
+
+    if not images:
+        print("\n⚠️  Nenhuma imagem válida encontrada.")
+        print("   A estrutura dataset/train|val|test/normal|rachado|sujo foi criada vazia.")
+        print("   Adicione imagens reais em raw_dataset/ e execute novamente.")
+        return {"train": {}, "val": {}, "test": {}}
 
     print(f"\n📦 Organizando...\n")
     stats = {"train": {}, "val": {}, "test": {}}
 
-    for cls, groups in sorted(images.items()):
+    for cls in PROJECT_CLASSES:
+        groups = images.get(cls, {})
         total_imgs = sum(len(f) for f in groups.values())
+
+        if total_imgs == 0:
+            print(f"   ⚠️  {cls}: 0 imagens (pasta criada vazia)")
+            for split_name in REQUIRED_SPLITS:
+                stats[split_name][cls] = 0
+            continue
+
         print(f"   📂 {cls}: {len(groups)} grupos, {total_imgs} imagens")
 
         train_f, val_f, test_f = split_groups(groups, train_r, val_r, test_r, seed)
@@ -186,12 +196,17 @@ def prepare_dataset(train_r=0.70, val_r=0.15, test_r=0.15, seed=42):
     print(f"   total: {total:4d}")
 
     # Avisos
-    for cls in sorted(images.keys()):
+    for cls in PROJECT_CLASSES:
         tc = stats["train"].get(cls, 0)
-        if tc < 20:
+        if tc == 0 and cls == "sujo":
+            print(
+                "\n   ⚠️  'sujo' está vazio. A classe foi preservada na estrutura, "
+                "mas não será treinada enquanto não houver imagens reais."
+            )
+        elif tc < 20:
             print(f"\n   ⚠️  '{cls}' tem apenas {tc} imgs de treino.")
 
-    tc = list(stats["train"].values())
+    tc = [v for v in stats["train"].values() if v > 0]
     if len(tc) >= 2 and min(tc) > 0 and max(tc)/min(tc) > 3:
         print(f"\n   ⚠️  Desequilíbrio: {max(tc)} vs {min(tc)} ({max(tc)/min(tc):.1f}x)")
 

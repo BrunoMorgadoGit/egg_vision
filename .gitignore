@@ -19,6 +19,7 @@ dataset/
 
 # Resultados de treinamento (modelos são pesados)
 runs/
+outputs/
 
 # IDE
 .vscode/
