@@ -217,20 +217,33 @@ def build_active_dataset_view(active_classes: list[str]) -> str:
         for class_name in active_classes:
             source = os.path.join(DATASET_PATH, split, class_name)
             dest = os.path.join(split_dest, class_name)
-
-            try:
-                os.symlink(source, dest, target_is_directory=True)
-            except OSError:
-                shutil.copytree(source, dest)
+            shutil.copytree(source, dest)
 
     return ACTIVE_DATASET_PATH
 
 
-def resolve_run_name() -> str:
+def has_training_artifacts(run_path: str) -> bool:
+    """Retorna True se a execução já tem artefatos de treino relevantes."""
+    artifact_paths = [
+        os.path.join(run_path, "weights", "best.pt"),
+        os.path.join(run_path, "weights", "last.pt"),
+        os.path.join(run_path, "results.csv"),
+    ]
+    return any(os.path.exists(path) for path in artifact_paths)
+
+
+def resolve_run_name() -> tuple[str, bool]:
     """Evita sobrescrever silenciosamente uma execução anterior."""
     default_run_path = os.path.join(PROJECT_PATH, RUN_NAME)
     if not os.path.exists(default_run_path):
-        return RUN_NAME
+        return RUN_NAME, False
+
+    if not has_training_artifacts(default_run_path):
+        print(
+            f"\n⚠️  Execução incompleta encontrada em: {default_run_path}\n"
+            "   O diretório será reutilizado porque não há best.pt, last.pt ou results.csv."
+        )
+        return RUN_NAME, True
 
     suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_name = f"{RUN_NAME}_{suffix}"
@@ -238,7 +251,7 @@ def resolve_run_name() -> str:
         f"\n⚠️  Execução anterior encontrada em: {default_run_path}\n"
         f"   Nova execução será salva como: {run_name}"
     )
-    return run_name
+    return run_name, False
 
 
 def treinar():
@@ -250,7 +263,7 @@ def treinar():
     ensure_classification_model()
     _, active_classes = validate_dataset_for_training()
     training_data_path = build_active_dataset_view(active_classes)
-    run_name = resolve_run_name()
+    run_name, exist_ok = resolve_run_name()
 
     print(f"\n📦 Modelo base:    {MODEL_NAME}")
     print(f"📐 Tamanho imagem: {IMGSZ}px")
@@ -284,7 +297,7 @@ def treinar():
         batch=BATCH,
         project=PROJECT_PATH,
         name=run_name,
-        exist_ok=False,
+        exist_ok=exist_ok,
         verbose=True,
         seed=SEED,
         deterministic=True,
