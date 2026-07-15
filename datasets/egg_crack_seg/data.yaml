@@ -1,0 +1,6 @@
+path: datasets/egg_crack_seg
+train: images/train
+val: images/val
+test: images/test
+names:
+  0: rachadura

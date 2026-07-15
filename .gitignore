@@ -16,10 +16,14 @@ __pycache__/
 # Dataset (imagens são pesadas demais para git)
 raw_dataset/
 dataset/
+dataset_augmented/
+datasets/egg_crack_seg/images/
+datasets/egg_crack_seg/labels/
 
 # Resultados de treinamento (modelos são pesados)
 runs/
 outputs/
+*.pt
 
 # IDE
 .vscode/

@@ -216,3 +216,145 @@ O treino usa data augmentation moderado: rotação, espelhamento horizontal, tra
 6. Confirme em `python src/validate_model.py --split val` que `sujo` aparece nas métricas.
 
 Enquanto esses passos não forem feitos, o modelo não deve ser usado para reconhecer ovos sujos.
+
+## Segmentação de rachaduras
+
+O EggVision possui dois pipelines independentes:
+
+| Tarefa | O que responde | Modelo/saída |
+|--------|----------------|--------------|
+| Classificação | Avalia a imagem inteira como `normal` ou `rachado` | `runs/classify/eggvision_mvp/weights/best.pt` |
+| Detecção | Usaria apenas caixas retangulares; não é usada para localizar a rachadura | — |
+| Segmentação | Localiza os pixels da rachadura com máscara e contorno | `runs/segment/eggvision_crack_seg/weights/best.pt` |
+
+O pipeline de segmentação tem uma única classe, `0: rachadura`. A classe `sujo` não participa desse modelo. Imagens normais continuam necessárias como exemplos negativos e recebem labels `.txt` vazias no dataset preparado.
+
+### Estrutura
+
+```text
+annotations/egg_crack_seg/rachado/  # polígonos manuais das rachaduras
+datasets/egg_crack_seg/
+├── data.yaml
+├── images/{train,val,test}/
+└── labels/{train,val,test}/
+```
+
+As anotações espelham o caminho relativo dentro de `raw_dataset/rachado`. No layout atual, por exemplo:
+
+```text
+raw_dataset/rachado/Rachado/ovo01-foto1.jpg
+annotations/egg_crack_seg/rachado/Rachado/ovo01-foto1.txt
+```
+
+Cada linha do label segue YOLO Segmentation:
+
+```text
+0 x1 y1 x2 y2 x3 y3 ...
+```
+
+As coordenadas são normalizadas entre 0 e 1 e cada polígono tem ao menos três pontos. Imagens rachadas exigem polígonos reais; o projeto não cria máscaras a partir do nome da pasta ou do contorno inteiro do ovo.
+
+### Anotar e revisar
+
+```bash
+python src/annotate_cracks.py
+python src/annotate_cracks.py --preview
+```
+
+O segundo comando salva overlays em `outputs/segmentation_annotation_preview/` sem alterar as imagens ou labels. Os atalhos da interface e o fluxo completo estão em [docs/SEGMENTACAO_RACHADURAS.md](docs/SEGMENTACAO_RACHADURAS.md).
+
+### Validar e preparar
+
+Antes dos splits, confira as anotações-fonte:
+
+```bash
+python src/validate_seg_dataset.py --source-annotations
+```
+
+Depois que todas as imagens rachadas tiverem labels válidas:
+
+```bash
+python src/prepare_seg_dataset.py
+python src/validate_seg_dataset.py
+```
+
+O preparador usa seed 42, split aproximado 70/15/15, agrupa por `classe + ovoXX` e copia arquivos com `shutil.copy2`. Fotos como `ovo01-foto1.jpg` e `ovo01-foto2.jpg` da mesma classe permanecem no mesmo split. O identificador `normal:ovo01` é diferente de `rachado:ovo01`.
+
+O script não remove o dataset gerado por padrão. Para recriá-lo conscientemente após mudar as anotações:
+
+```bash
+python src/prepare_seg_dataset.py --rebuild
+```
+
+### Testar o pipeline e treinar
+
+Testes CPU-only, sem download de modelo:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Smoke training, somente depois de o validador retornar código zero:
+
+```bash
+python src/train_seg.py --epochs 1 --imgsz 320 --batch 1 --name eggvision_crack_seg_smoke
+```
+
+Treinamento inicial completo:
+
+```bash
+python src/train_seg.py \
+  --data datasets/egg_crack_seg/data.yaml \
+  --epochs 100 \
+  --patience 20 \
+  --imgsz 1024 \
+  --batch 4 \
+  --name eggvision_crack_seg
+```
+
+O treino usa `yolov8n-seg.pt`, seed 42, early stopping e augmentations leves. `mosaic`, `mixup` e random erasing ficam desativados para não apagar ou distorcer rachaduras. Se faltar memória, tente explicitamente `--batch 2` e depois `--batch 1`; reduza `--imgsz` apenas se ainda for necessário.
+
+Para retomar o `last.pt` da execução padrão:
+
+```bash
+python src/train_seg.py --name eggvision_crack_seg --resume
+```
+
+### Avaliar e inferir
+
+A avaliação final usa o split de teste e registra métricas de caixa e máscara separadamente:
+
+```bash
+python src/evaluate_seg.py --split test
+```
+
+Inferência em uma imagem ou pasta:
+
+```bash
+python src/predict_seg.py --source caminho/ovo.jpg --conf 0.25 --save-json
+python src/predict_seg.py --source caminho/pasta --conf 0.25 --save-json
+```
+
+Sem máscara da classe `rachadura` acima do limite, o resultado é `NORMAL`; com ao menos uma máscara válida, é `RACHADO`. A saída desenha máscara/contorno, sem caixa gigante ao redor do ovo.
+
+### Artefatos
+
+```text
+runs/segment/eggvision_crack_seg/weights/best.pt
+runs/segment/eggvision_crack_seg/weights/last.pt
+runs/segment/eggvision_crack_seg/results.csv
+runs/segment/eggvision_crack_seg/results.png
+runs/segment/eggvision_crack_seg/evaluation/test_metrics.json
+outputs/segmentation_predictions/*_seg.jpg
+outputs/segmentation_predictions/*_seg.json
+```
+
+Para um diagnóstico auxiliar das curvas:
+
+```bash
+python src/analyze_seg_training.py
+```
+
+Esse diagnóstico considera tendências de várias épocas; não declara overfitting por uma época isolada. Compare `train/seg_loss`, `val/seg_loss`, métricas de máscara e `results.png`. Com poucos ovos, uma única falha na validação muda vários pontos percentuais.
+
+Data augmentation não cria ovos fisicamente diferentes. Além disso, se fotos do mesmo ovo tiverem IDs diferentes, o agrupamento automático não consegue reconhecê-las e pode haver vazamento entre treino e teste. As métricas só ganham confiabilidade com mais ovos normais e rachados fisicamente distintos e, futuramente, dados separados para a classe `sujo` no classificador correspondente.
